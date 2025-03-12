@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "core/codegen",
+    "core/lib",
+    "core/cargo-rusteze",
+    "examples/hello-world"
+]
