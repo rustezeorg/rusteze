@@ -1,0 +1,81 @@
+service_name = "hello-world"
+
+[deployment]
+provider = "aws"
+region = "ap-southeast-2"
+type = "lambda"
+stage = "prod"
+
+# Lambda function configuration
+[lambda]
+memory_size = 256
+timeout = 30
+runtime = "provided.al2"
+
+# Pub/Sub messaging configuration
+[pubsub]
+# Message retention period in days (1-365)
+message_retention_days = 14
+# Visibility timeout for SQS messages in seconds (1-43200)
+visibility_timeout_seconds = 30
+# Maximum number of times a message can be received before moving to DLQ (1-1000)
+max_receive_count = 3
+# Enable dead letter queues for failed messages
+enable_dead_letter_queues = true
+# Prefix for SNS topic names
+topic_prefix = "hello-world"
+# Prefix for SQS queue names
+queue_prefix = "hello-world"
+# Message delivery delay in seconds (0-900)
+delivery_delay_seconds = 0
+# Maximum message size in bytes (1024-262144)
+max_message_size_bytes = 262144
+# Enable message encryption at rest
+enable_encryption = false
+# Enable FIFO queues for ordered message processing
+enable_fifo = false
+# Content-based deduplication for FIFO queues
+content_based_deduplication = false
+
+# Global environment variables
+[environment]
+LOG_LEVEL = "info"
+APP_ENV = "production"
+
+# Environment-specific overrides
+[environments.staging]
+[environments.staging.deployment]
+region = "us-west-2"
+stage = "staging"
+
+[environments.staging.lambda]
+memory_size = 512
+timeout = 60
+
+[environments.staging.pubsub]
+message_retention_days = 7
+visibility_timeout_seconds = 60
+max_receive_count = 5
+
+[environments.staging.environment]
+LOG_LEVEL = "debug"
+APP_ENV = "staging"
+
+[environments.development]
+[environments.development.deployment]
+region = "us-east-1"
+stage = "dev"
+
+[environments.development.lambda]
+memory_size = 128
+timeout = 15
+
+[environments.development.pubsub]
+message_retention_days = 1
+visibility_timeout_seconds = 10
+max_receive_count = 1
+enable_dead_letter_queues = false
+
+[environments.development.environment]
+LOG_LEVEL = "trace"
+APP_ENV = "development"

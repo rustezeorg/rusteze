@@ -1,4 +1,4 @@
-# Cargo Rusteze
+# Cargo Rusteze Deploy
 
 A cargo plugin for rusteze
 

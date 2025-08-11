@@ -15,11 +15,11 @@
 ## What is Rusteze
 
 The goal of rusteze is to write once deploy anywhere, so write your api endpoints and deploy
-to aws lambda functions, containers, cloudflare or just to a docker container you can run yourself.
+to aws lambda functions, containers, cloudflare or just to a docker container that you can run yourself.
 
 ## Quick Look
 
-Below is a basic "Hello Wolrd" application:
+Below is a basic "Hello World" application:
 
 ```rust
 use rusteze::{route};
@@ -33,7 +33,15 @@ fn get_hello(word: String) -> String {
 }
 ```
 
-You can now deploy this with `cargo rusteze deploy`
+You can now start this locally with `cargo rusteze run`.
+
+Hit the endpoint:
+
+```curl
+
+```
+
+Once you're happy with your changes, You can now deploy this with `cargo rusteze deploy` and it will deploy to the cloud provider that you've configured.
 
 ## Deployments
 

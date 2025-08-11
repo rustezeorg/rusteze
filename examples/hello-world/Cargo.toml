@@ -3,5 +3,9 @@ name = "hello-world"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "hello-world"
+path = "src/main.rs"
+
 [dependencies]
 rusteze = { path = "../../core/lib"}

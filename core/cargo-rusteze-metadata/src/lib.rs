@@ -2,9 +2,6 @@ use std::fs;
 
 use serde::Deserialize;
 
-#[cfg(feature = "aws")]
-pub mod aws;
-
 #[derive(Deserialize, Debug, Clone)]
 pub struct RustezeConfig {
     pub service_name: String,

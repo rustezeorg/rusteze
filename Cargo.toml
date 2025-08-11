@@ -4,6 +4,8 @@ resolver = "2"
 members = [
     "core/codegen",
     "core/lib",
-    "core/cargo-rusteze",
+    "core/cargo-rusteze-metadata",
+    "core/cargo-rusteze-deploy",
+    "core/cargo-rusteze-run",
     "examples/hello-world"
 ]

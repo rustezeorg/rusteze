@@ -1,0 +1,38 @@
+{
+  "get_bar_handler": {
+    "method": "GET",
+    "name": "get_bar_handler",
+    "path": "/bar",
+    "signature": {
+      "is_async": false,
+      "parameters": [],
+      "return_type": "String"
+    }
+  },
+  "get_foo_handler": {
+    "method": "GET",
+    "name": "get_foo_handler",
+    "path": "/brad",
+    "signature": {
+      "is_async": false,
+      "parameters": [],
+      "return_type": "String"
+    }
+  },
+  "get_hello_handler": {
+    "method": "GET",
+    "name": "get_hello_handler",
+    "path": "/test/{word}",
+    "signature": {
+      "is_async": false,
+      "parameters": [
+        {
+          "name": "word",
+          "param_type": "word : String.ty",
+          "source": "Context"
+        }
+      ],
+      "return_type": "String"
+    }
+  }
+}

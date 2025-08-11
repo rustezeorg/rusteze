@@ -3,8 +3,8 @@ use std::env;
 use std::fs::{self, File};
 
 #[cfg(feature = "aws")]
-use rusteze_cargo::aws::lambda::deploy_lambda;
-use rusteze_cargo::read_config;
+use rusteze_cargo_deploy::aws::lambda::deploy_lambda;
+use rusteze_cargo_metadata::read_config;
 use tokio::runtime::Runtime;
 
 /// Reads `deploy.toml`

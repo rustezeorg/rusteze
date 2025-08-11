@@ -1,0 +1,20 @@
+[package]
+name = "rusteze-cargo-metadata"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "cargo-rusteze-metadata"
+path = "src/main.rs"
+
+[dependencies]
+toml = "0.8"
+serde = {version = "1.0", features = ["derive"]}
+tokio = { version = "1", features = ["full"] }
+aws-config =  {version = "1.0", optional = true }
+aws-sdk-lambda = {version = "1.2", optional = true }
+aws-sdk-apigatewayv2 = "1.65.0"
+
+[features]
+default = ["aws"]
+aws = ["dep:aws-config", "dep:aws-sdk-lambda"]

@@ -1,0 +1,125 @@
+[service]
+name = "rusteze-service"
+version = "0.1.0"
+description = "Rusteze serverless application"
+
+[providers.aws]
+provider_type = "aws"
+
+[providers.aws.config]
+region = "us-east-1"
+runtime = "provided.al2"
+
+[functions.get_bar_handler]
+name = "get_bar_handler"
+path = "/bar"
+method = "GET"
+file = "src/get_bar_handler.rs"
+handler_type = "HttpRoute"
+
+[functions.get_bar_handler.signature]
+parameters = []
+return_type = "String"
+is_async = false
+
+[functions.get_bar_handler.deployment_metadata]
+memory_mb = 256
+timeout_seconds = 30
+permissions = [
+    "lambda:InvokeFunction",
+    "apigateway:*",
+]
+
+[functions.get_bar_handler.deployment_metadata.environment_variables]
+
+[functions.get_f_handler]
+name = "get_f_handler"
+path = "/foo"
+method = "GET"
+file = "src/get_f_handler.rs"
+handler_type = "HttpRoute"
+
+[functions.get_f_handler.signature]
+parameters = []
+return_type = "String"
+is_async = false
+
+[functions.get_f_handler.deployment_metadata]
+memory_mb = 256
+timeout_seconds = 30
+permissions = [
+    "lambda:InvokeFunction",
+    "apigateway:*",
+]
+
+[functions.get_f_handler.deployment_metadata.environment_variables]
+
+[functions.get_fo_handler]
+name = "get_fo_handler"
+path = "/foo"
+method = "GET"
+file = "src/get_fo_handler.rs"
+handler_type = "HttpRoute"
+
+[functions.get_fo_handler.signature]
+parameters = []
+return_type = "String"
+is_async = false
+
+[functions.get_fo_handler.deployment_metadata]
+memory_mb = 256
+timeout_seconds = 30
+permissions = [
+    "lambda:InvokeFunction",
+    "apigateway:*",
+]
+
+[functions.get_fo_handler.deployment_metadata.environment_variables]
+
+[functions.get_foo_handler]
+name = "get_foo_handler"
+path = "/brad"
+method = "GET"
+file = "src/get_foo_handler.rs"
+handler_type = "HttpRoute"
+
+[functions.get_foo_handler.signature]
+parameters = []
+return_type = "String"
+is_async = false
+
+[functions.get_foo_handler.deployment_metadata]
+memory_mb = 256
+timeout_seconds = 30
+permissions = [
+    "lambda:InvokeFunction",
+    "apigateway:*",
+]
+
+[functions.get_foo_handler.deployment_metadata.environment_variables]
+
+[functions.get_hello_handler]
+name = "get_hello_handler"
+path = "/test/{word}"
+method = "GET"
+file = "src/get_hello_handler.rs"
+handler_type = "HttpRoute"
+
+[functions.get_hello_handler.signature]
+return_type = "String"
+is_async = false
+
+[[functions.get_hello_handler.signature.parameters]]
+name = "word"
+param_type = "word : String.ty"
+source = "Context"
+
+[functions.get_hello_handler.deployment_metadata]
+memory_mb = 256
+timeout_seconds = 30
+permissions = [
+    "lambda:InvokeFunction",
+    "apigateway:*",
+]
+
+[functions.get_hello_handler.deployment_metadata.environment_variables]
