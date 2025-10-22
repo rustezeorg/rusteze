@@ -7,6 +7,7 @@ pub struct RoutesConfig {
     pub route: std::collections::HashMap<String, RouteConfig>,
     pub topic: Option<std::collections::HashMap<String, TopicConfig>>,
     pub db: Option<std::collections::HashMap<String, DbConfig>>,
+    pub auth: Option<std::collections::HashMap<String, AuthHandlerConfig>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -32,6 +33,13 @@ pub struct RouteConfig {
     pub description: Option<String>,
     pub parameters: Option<std::collections::HashMap<String, ParameterConfig>>,
     pub deployment: Option<DeploymentConfig>,
+    pub auth: Option<AuthConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AuthConfig {
+    pub handler: String,
+    pub required: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -61,4 +69,11 @@ pub struct SubscriberConfig {
 pub struct DbConfig {
     pub name: String,
     pub description: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AuthHandlerConfig {
+    pub binary: String,
+    pub description: Option<String>,
+    pub deployment: Option<DeploymentConfig>,
 }

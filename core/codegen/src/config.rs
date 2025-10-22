@@ -7,8 +7,8 @@ use std::{
 
 // use rust
 use rusteze_config::{
-    DeploymentConfig, ParameterConfig, ProjectConfig, RouteConfig, RoutesConfig, SubscriberConfig,
-    TopicConfig,
+    AuthConfig, AuthHandlerConfig, DeploymentConfig, ParameterConfig, ProjectConfig, RouteConfig,
+    RoutesConfig, SubscriberConfig, TopicConfig,
 };
 
 pub fn create_default_routes_config() -> RoutesConfig {
@@ -27,6 +27,7 @@ pub fn create_default_routes_config() -> RoutesConfig {
         route: std::collections::HashMap::new(),
         topic: Some(std::collections::HashMap::new()),
         db: Some(std::collections::HashMap::new()),
+        auth: Some(std::collections::HashMap::new()),
     }
 }
 
@@ -130,6 +131,7 @@ pub fn try_update_manifest(
     path: &str,
     func_name: &syn::Ident,
     params: &Vec<(String, ParameterConfig)>,
+    requires_auth: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs::OpenOptions;
 
@@ -171,6 +173,24 @@ pub fn try_update_manifest(
         Some(map)
     };
 
+    // Create auth config if auth is required
+    let auth_config = if requires_auth {
+        // Find the default auth handler from existing auth handlers
+        let default_handler = config
+            .auth
+            .as_ref()
+            .and_then(|auth_handlers| auth_handlers.keys().next())
+            .map(|handler_name| handler_name.clone())
+            .unwrap_or_else(|| "default_auth_handler".to_string());
+
+        Some(AuthConfig {
+            handler: default_handler,
+            required: true,
+        })
+    } else {
+        None
+    };
+
     // Create new route
     let new_route = RouteConfig {
         method: method.to_string(),
@@ -185,6 +205,7 @@ pub fn try_update_manifest(
             environment: None,
             arn: None, // Will be populated after deployment
         }),
+        auth: auth_config,
     };
 
     // Insert or update the route using function name as key
@@ -198,6 +219,36 @@ pub fn try_update_manifest(
     Ok(())
 }
 
+pub fn update_auth_manifest(manifest_path: &Path, func_name: &syn::Ident, binary_name: &str) {
+    let mut config = get_config(manifest_path);
+
+    // Initialize auth handlers section if it doesn't exist
+    if config.auth.is_none() {
+        config.auth = Some(std::collections::HashMap::new());
+    }
+
+    if let Some(ref mut auth_handlers) = config.auth {
+        auth_handlers.insert(
+            func_name.to_string(),
+            AuthHandlerConfig {
+                binary: binary_name.to_string(),
+                description: Some(format!("Auth handler: {}", func_name)),
+                deployment: Some(DeploymentConfig {
+                    runtime: Some("rust".to_string()),
+                    memory: Some("128MB".to_string()),
+                    timeout: Some("10s".to_string()), // Auth should be fast
+                    environment: Some("auth".to_string()),
+                    arn: None,
+                }),
+            },
+        );
+    }
+
+    let json_string = serde_json::to_string_pretty(&config).unwrap();
+    let mut f = File::create(manifest_path).unwrap();
+    f.write_all(json_string.as_bytes()).unwrap();
+}
+
 pub fn update_manifest_safely(
     manifest_json_path: &Path,
     binary_name: &str,
@@ -205,6 +256,7 @@ pub fn update_manifest_safely(
     path: &str,
     func_name: &syn::Ident,
     params: &Vec<(String, ParameterConfig)>,
+    requires_auth: bool,
 ) {
     use std::time::Duration;
 
@@ -220,6 +272,7 @@ pub fn update_manifest_safely(
             path,
             func_name,
             params,
+            requires_auth,
         ) {
             Ok(()) => return,
             Err(_) => {
