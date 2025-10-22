@@ -2361,8 +2361,10 @@ dependencies = [
  "aws-config",
  "aws-sdk-apigatewayv2",
  "aws-sdk-lambda",
+ "aws-sdk-sts",
  "rusteze",
  "serde",
+ "serde_json",
  "tokio",
  "toml",
 ]

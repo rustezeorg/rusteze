@@ -1,6 +1,11 @@
+use std::path::Path;
 use std::process;
 
 use crate::commands::Command;
+use crate::read_config;
+
+#[cfg(feature = "aws")]
+use crate::aws::lambda::deploy_to_aws;
 
 const HELP_TEXT: &str = "
 OPTIONS:
@@ -28,9 +33,40 @@ pub async fn deploy_command(args: Vec<String>) {
                 return;
             }
             _ => {
-                print!("Unknown command: {}", subcommand);
-                process::exit(0)
+                println!("Unknown command: {}", subcommand);
+                process::exit(1);
             }
         };
+    }
+
+    // Check if .rusteze directory exists
+    if !Path::new(".rusteze").exists() {
+        println!("Error: .rusteze directory not found. Please run 'cargo rusteze codegen' first.");
+        process::exit(1);
+    }
+
+    // Read configuration
+    let config = read_config();
+    println!("Deploying service: {}", config.service_name);
+
+    match config.deployment.provider.as_str() {
+        "aws" => {
+            #[cfg(feature = "aws")]
+            {
+                if let Err(e) = deploy_to_aws(&config).await {
+                    println!("Deployment failed: {}", e);
+                    process::exit(1);
+                }
+            }
+            #[cfg(not(feature = "aws"))]
+            {
+                println!("AWS deployment not supported. Please compile with --features aws");
+                process::exit(1);
+            }
+        }
+        _ => {
+            println!("Unsupported provider: {}", config.deployment.provider);
+            process::exit(1);
+        }
     }
 }
