@@ -108,19 +108,35 @@ pub fn route(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Generate the binary code that includes the function directly
     let proxy_code = format!(
-        r#"// Auto-generated binary for route: {} {}
+        r#"// Auto-generated Lambda binary for route: {} {}
+use lambda_http::{{run, service_fn, Error, Request, RequestExt}};
+use lambda_http::http::{{Response, StatusCode}};
 use serde::{{Deserialize, Serialize}};
+use serde_json::json;
 
 // Include all types from the main crate
 use {}::*;
 
 {}
 
-#[tokio::main]
-async fn main() {{
+async fn function_handler(event: Request) -> Result<Response<String>, Error> {{
+    println!("Processing Lambda request");
 {}
     let result = {}.await;
-    println!("{{}}", result);
+    
+    // Convert result to JSON response
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(serde_json::to_string(&result).unwrap_or_else(|_| result.to_string()))
+        .map_err(Box::new)?;
+    
+    Ok(response)
+}}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {{
+    run(service_fn(function_handler)).await
 }}
 "#,
         method, path, crate_name, func_str, param_setup, function_call
@@ -152,12 +168,16 @@ name = "rusteze_proxy"
 version = "0.1.0"
 edition = "2021"
 
+# Explicitly declare this is not part of a workspace
 [workspace]
 
 [dependencies]
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
 tokio = {{ version = "1", features = ["macros", "rt-multi-thread"] }}
+lambda_http = "0.14"
+lambda_runtime = "0.13"
+aws_lambda_events = "0.16"
 {} = {{ path = "../" }}
 rusteze = {{ path = "../../../core/lib" }}
 
@@ -290,66 +310,62 @@ pub fn subscriber(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Generate the subscriber binary code
     let subscriber_code = format!(
-        r#"// Auto-generated subscriber binary for topic: {}
-
+        r#"// Auto-generated Lambda subscriber binary for topic: {}
+use lambda_runtime::{{run, service_fn, Error, LambdaEvent}};
+use aws_lambda_events::event::sqs::SqsEvent;
 use serde::{{Deserialize, Serialize}};
+use serde_json::json;
 use {}::*;
 
 {}
 
-#[tokio::main]
-async fn main() {{
-    // Parse SQS message from command line arguments
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {{
-        eprintln!("No message payload provided");
-        std::process::exit(1);
-    }}
-
-    let message_json = &args[1];
-    
-    // Parse the SQS message which contains the SNS notification
-    match serde_json::from_str::<serde_json::Value>(message_json) {{
-        Ok(sqs_message) => {{
-            // Extract SNS message from SQS record
-            if let Some(records) = sqs_message.get("Records").and_then(|r| r.as_array()) {{
-                for record in records {{
-                    if let Some(sns) = record.get("Sns") {{
-                        if let Some(message) = sns.get("Message").and_then(|m| m.as_str()) {{
-                            // Parse the actual message payload
-                            match serde_json::from_str(message) {{
-                                Ok(payload) => {{
-                                    println!("SENDING DATA TO HANDLER!: {{:?}}", payload);
-                                    let result = {}(payload).await;
-                                    println!("Subscriber processed message: {{:?}}", result);
-                                }}
-                                Err(e) => {{
-                                    eprintln!("Failed to parse message payload: {{}}", e);
-                                    std::process::exit(1);
-                                }}
+async fn function_handler(event: LambdaEvent<SqsEvent>) -> Result<(), Error> {{
+    for record in event.payload.records {{
+        // Parse the SQS message which contains the SNS notification
+        if let Some(body) = record.body {{
+            match serde_json::from_str::<serde_json::Value>(&body) {{
+                Ok(sqs_message) => {{
+                    // Extract SNS message from SQS record
+                    if let Some(message) = sqs_message.get("Message").and_then(|m| m.as_str()) {{
+                        // Parse the actual message payload
+                        match serde_json::from_str(message) {{
+                            Ok(payload) => {{
+                                println!("Processing message: {{:?}}", payload);
+                                let result = {}(payload).await;
+                                println!("Subscriber processed message: {{:?}}", result);
+                            }}
+                            Err(e) => {{
+                                eprintln!("Failed to parse message payload: {{}}", e);
+                                return Err(e.into());
+                            }}
+                        }}
+                    }} else {{
+                        // Direct message format (for testing)
+                        match serde_json::from_value(sqs_message) {{
+                            Ok(payload) => {{
+                                let result = {}(payload).await;
+                                println!("Subscriber processed message: {{:?}}", result);
+                            }}
+                            Err(e) => {{
+                                eprintln!("Failed to parse direct message: {{}}", e);
+                                return Err(e.into());
                             }}
                         }}
                     }}
                 }}
-            }} else {{
-                // Direct message format (for testing)
-                match serde_json::from_value(sqs_message) {{
-                    Ok(payload) => {{
-                        let result = {}(payload).await;
-                        println!("Subscriber processed message: {{:?}}", result);
-                    }}
-                    Err(e) => {{
-                        eprintln!("Failed to parse direct message: {{}}", e);
-                        std::process::exit(1);
-                    }}
+                Err(e) => {{
+                    eprintln!("Failed to parse SQS message: {{}}", e);
+                    return Err(e.into());
                 }}
             }}
         }}
-        Err(e) => {{
-            eprintln!("Failed to parse SQS message: {{}}", e);
-            std::process::exit(1);
-        }}
     }}
+    Ok(())
+}}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {{
+    run(service_fn(function_handler)).await
 }}
 "#,
         topic, crate_name, func_str, func_name, func_name
@@ -441,34 +457,32 @@ pub fn auth(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Generate the auth handler binary code
     let auth_code = format!(
-        r#"// Auto-generated auth handler binary
+        r#"// Auto-generated Lambda auth handler binary
+use lambda_http::{{run, service_fn, Error, Request, RequestExt}};
+use lambda_http::http::{{Response, StatusCode}};
 use serde::{{Deserialize, Serialize}};
+use serde_json::json;
 use {}::*;
 
+async fn function_handler(event: Request) -> Result<Response<String>, Error> {{
+    println!("Auth context: {{:?}}", event.headers());
+    
+    // Call the auth handler from the imported crate
+    {}().await;
+    println!("Auth check passed");
+    
+    let response = Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "application/json")
+        .body(json!({{"authorized": true}}).to_string())
+        .map_err(Box::new)?;
+    
+    Ok(response)
+}}
+
 #[tokio::main]
-async fn main() {{
-    // Parse auth context from command line arguments
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {{
-        eprintln!("No auth context provided");
-        std::process::exit(1);
-    }}
-    
-    let auth_context = &args[1];
-    
-    // Parse the auth context (headers, tokens, etc.)
-    match serde_json::from_str::<serde_json::Value>(auth_context) {{
-        Ok(context) => {{
-            println!("Auth context: {{:?}}", context);
-            // Call the auth handler from the imported crate
-            {}().await;
-            println!("Auth check passed");
-        }}
-        Err(e) => {{
-            eprintln!("Failed to parse auth context: {{}}", e);
-            std::process::exit(1);
-        }}
-    }}
+async fn main() -> Result<(), Error> {{
+    run(service_fn(function_handler)).await
 }}
 "#,
         crate_name, func_name

@@ -23,8 +23,12 @@ pub fn init_serve_command() -> Command {
 pub async fn serve_command(args: Vec<String>) {
     println!("Running serve command with args {:?}", args);
 
-    if args.len() >= 3 {
-        let subcommand = &args[2];
+    // Find the index of "serve" command and check for subcommands after it
+    let serve_index = args.iter().position(|arg| arg == "serve").unwrap_or(0);
+    let subcommand_index = serve_index + 1;
+
+    if args.len() > subcommand_index {
+        let subcommand = &args[subcommand_index];
 
         match subcommand.as_str() {
             "help" | "--help" | "-h" => {
@@ -32,8 +36,11 @@ pub async fn serve_command(args: Vec<String>) {
                 return;
             }
             _ => {
-                print!("Unknown command: {}", subcommand);
-                process::exit(0)
+                // If it starts with -, it's a flag, otherwise it's an unknown command
+                if !subcommand.starts_with('-') {
+                    println!("Unknown subcommand: {}", subcommand);
+                    process::exit(1);
+                }
             }
         };
     }

@@ -95,8 +95,8 @@ pub fn generate_generic_proxy_code(func: &ItemFn, route_path: &str) -> (String, 
                     // Handle path parameter
                     if type_str.contains("String") {
                         param_setup.push_str(&format!(
-                            "    // Extract {} from URL path parameter\n    let args: Vec<String> = std::env::args().collect();\n    let {} = if args.len() > 1 {{\n        args[1].clone()\n    }} else {{\n        String::new()\n    }};\n",
-                            param_name, param_name
+                            "    // Extract {} from URL path parameter\n    let {} = event.path_parameters().first(\"{}\").unwrap_or_default().to_string();\n",
+                            param_name, param_name, param_name
                         ));
                     } else if type_str.contains("i32")
                         || type_str.contains("u32")
@@ -104,19 +104,19 @@ pub fn generate_generic_proxy_code(func: &ItemFn, route_path: &str) -> (String, 
                         || type_str.contains("u64")
                     {
                         param_setup.push_str(&format!(
-                            "    // Extract {} from URL path parameter\n    let args: Vec<String> = std::env::args().collect();\n    let {} = if args.len() > 1 {{\n        args[1].parse().unwrap_or(0)\n    }} else {{\n        0\n    }};\n",
-                            param_name, param_name
+                            "    // Extract {} from URL path parameter\n    let {} = event.path_parameters().first(\"{}\").and_then(|s| s.parse().ok()).unwrap_or(0);\n",
+                            param_name, param_name, param_name
                         ));
                     } else if type_str.contains("bool") {
                         param_setup.push_str(&format!(
-                            "    // Extract {} from URL path parameter\n    let args: Vec<String> = std::env::args().collect();\n    let {} = if args.len() > 1 {{\n        args[1] == \"true\" || args[1] == \"1\" || args[1] == \"yes\"\n    }} else {{\n        false\n    }};\n",
-                            param_name, param_name
+                            "    // Extract {} from URL path parameter\n    let {} = event.path_parameters().first(\"{}\").map(|s| s == \"true\" || s == \"1\" || s == \"yes\").unwrap_or(false);\n",
+                            param_name, param_name, param_name
                         ));
                     }
                 } else {
                     // This is likely a structured input type - parse from JSON
                     param_setup.push_str(&format!(
-                        "    // Parse structured input from JSON\n    let args: Vec<String> = std::env::args().collect();\n    let {} = if args.len() > 1 {{\n        serde_json::from_str(&args[1]).unwrap_or_else(|e| {{\n            eprintln!(\"Failed to parse JSON input: {{}}\", e);\n            std::process::exit(1);\n        }})\n    }} else {{\n        eprintln!(\"No JSON input provided\");\n        std::process::exit(1);\n    }};\n",
+                        "    // Parse structured input from request body\n    let body_str = match std::str::from_utf8(event.body()) {{\n        Ok(s) => s,\n        Err(_) => panic!(\"Invalid UTF-8 in request body\"),\n    }};\n    let {} = if !body_str.is_empty() {{\n        serde_json::from_str(body_str).unwrap_or_else(|e| {{\n            eprintln!(\"Failed to parse JSON input: {{}}\", e);\n            panic!(\"Invalid JSON body\");\n        }})\n    }} else {{\n        panic!(\"No request body provided\");\n    }};\n",
                         param_name
                     ));
                 }

@@ -4,7 +4,6 @@ use std::process;
 use crate::commands::Command;
 use crate::read_config;
 
-#[cfg(feature = "aws")]
 use crate::aws::lambda::deploy_to_aws;
 
 const HELP_TEXT: &str = "
@@ -24,8 +23,12 @@ pub fn init_deploy_command() -> Command {
 pub async fn deploy_command(args: Vec<String>) {
     println!("Running deploy command with args {:?}", args);
 
-    if args.len() >= 3 {
-        let subcommand = &args[2];
+    // Find the index of "deploy" command and check for subcommands after it
+    let deploy_index = args.iter().position(|arg| arg == "deploy").unwrap_or(0);
+    let subcommand_index = deploy_index + 1;
+
+    if args.len() > subcommand_index {
+        let subcommand = &args[subcommand_index];
 
         match subcommand.as_str() {
             "help" | "--help" | "-h" => {
@@ -33,7 +36,12 @@ pub async fn deploy_command(args: Vec<String>) {
                 return;
             }
             _ => {
-                println!("Unknown command: {}", subcommand);
+                // If it starts with -, it's a flag, otherwise it's an unknown command
+                if subcommand.starts_with('-') {
+                    println!("Unknown flag: {}", subcommand);
+                } else {
+                    println!("Unknown subcommand: {}", subcommand);
+                }
                 process::exit(1);
             }
         };
@@ -51,16 +59,8 @@ pub async fn deploy_command(args: Vec<String>) {
 
     match config.deployment.provider.as_str() {
         "aws" => {
-            #[cfg(feature = "aws")]
-            {
-                if let Err(e) = deploy_to_aws(&config).await {
-                    println!("Deployment failed: {}", e);
-                    process::exit(1);
-                }
-            }
-            #[cfg(not(feature = "aws"))]
-            {
-                println!("AWS deployment not supported. Please compile with --features aws");
+            if let Err(e) = deploy_to_aws(&config).await {
+                println!("Deployment failed: {}", e);
                 process::exit(1);
             }
         }
