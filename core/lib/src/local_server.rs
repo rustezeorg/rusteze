@@ -304,6 +304,11 @@ async fn run_binary_handler(binary_name: &str, args: Vec<String>) -> Result<()> 
     let mut child = Command::new(binary_path)
         .env("RUSTEZE_LOCAL", "true")
         .env("RUSTEZE_PORT", "3000")
+        // These are lambda specific
+        .env("AWS_LAMBDA_FUNCTION_NAME", &binary_name)
+        .env("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "128")
+        .env("AWS_LAMBDA_FUNCTION_VERSION", "1.0")
+        .env("AWS_LAMBDA_RUNTIME_API", "1.0")
         .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

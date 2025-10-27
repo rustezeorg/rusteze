@@ -21,6 +21,24 @@
 The goal of rusteze is to write once deploy anywhere, so write your api endpoints and deploy
 to aws lambda functions, containers, cloudflare or just to a docker container you can run yourself.
 
+## Installation
+
+### Prerequisites
+
+For AWS Lambda deployments, you'll need:
+
+```bash
+# Install cargo-lambda for Lambda function building and packaging
+cargo install cargo-lambda
+```
+
+### Install Rusteze
+
+```bash
+# Install from source (for now)
+cargo install --git https://github.com/rustezeorg/rusteze/tree/main/core/cargo-rusteze rusteze
+```
+
 ## Quick Look
 
 Below is a basic "Hello World" application:
@@ -102,13 +120,11 @@ cargo build --bin handle_user_event_subscriber
 ./target/debug/handle_user_event_subscriber '{"user_id": "user123", "action": "login", "timestamp": "2024-01-15T10:30:00Z"}'
 ```
 
-## Installation
-
 ## Deployments
 
 ### Development
 
-- [ ] Local dev server
+- [x] Local dev server
   - [x] API
   - [x] run command to start dev server
   - [x] hot path reload
@@ -116,16 +132,22 @@ cargo build --bin handle_user_event_subscriber
   - [x] routes.json to lock
   - [x] Path param pass through
   - [x] Body on post
-  - [ ] Auth
+  - [x] Auth
 - [ ] pub/sub setup
   - [x] local server to allow local development.
   - [x] local pubsub sending
 - [ ] Deployments
-  - [ ] AWS
-    - [ ] Api Gateway
-    - [ ] lambda
+  - [x] AWS
+    - [x] Api Gateway
+    - [x] lambda
     - [ ] SNS + SQS (pub/sub)
   - [ ] Cloudflare
   - [ ] GCP
   - [ ] Container
 - [ ] Release to crates
+
+- need to fix api gateway updates.
+  - Need to fix removal of routes + integrations when not in code anymore.
+- implement tracing: https://crates.io/crates/tracing
+- Issue when ARN hasn't been saved, or when .rusteze folder is deleted, you lose the ARN's leading to multiple deployments, wonder if the manifest.json should move outside.
+- Issue when running serve locally with missing env var: WS_LAMBDA_FUNCTION_NAME

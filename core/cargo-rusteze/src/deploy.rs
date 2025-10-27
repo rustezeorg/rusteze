@@ -4,7 +4,7 @@ use std::process;
 use crate::commands::Command;
 use crate::read_config;
 
-use crate::aws::lambda::deploy_to_aws;
+use crate::aws::builder::deploy_to_aws;
 
 const HELP_TEXT: &str = "
 OPTIONS:

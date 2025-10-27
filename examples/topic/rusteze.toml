@@ -1,0 +1,12 @@
+service_name = "topic"
+
+[deployment]
+provider = "aws"
+region = "ap-southeast-2"
+# optional - By default it will use this.
+type = "lambda"
+
+
+# optional depending on deployment
+[lambda]
+memory_size = 256

@@ -1,4 +1,5 @@
 use crate::RustezeConfig;
+use crate::aws::gateway::build::build_api_gateway;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_apigatewayv2::Client as ApiGatewayClient;
 use aws_sdk_iam::Client as IamClient;
@@ -6,96 +7,9 @@ use aws_sdk_lambda::Client as LambdaClient;
 use aws_sdk_sts::error::ProvideErrorMetadata;
 use rusteze_config::RoutesConfig as Manifest;
 
+use crate::aws::lambda::build::{build_lambda_functions, deploy_function};
 use std::collections::HashMap;
-use std::{fs, path::Path, process::Command};
-
-fn build_lambda_functions() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Building Lambda functions with cargo lambda...");
-
-    // Check if cargo lambda is installed
-    let check_status = Command::new("cargo")
-        .args(&["lambda", "--version"])
-        .output();
-
-    match check_status {
-        Ok(output) if output.status.success() => {
-            println!(
-                "✓ cargo-lambda found: {}",
-                String::from_utf8_lossy(&output.stdout).trim()
-            );
-        }
-        _ => {
-            return Err(
-                "cargo-lambda not found. Please install it with: cargo install cargo-lambda".into(),
-            );
-        }
-    }
-
-    // Change to .rusteze directory
-    std::env::set_current_dir(".rusteze")?;
-
-    // Build with cargo lambda for proper Lambda packaging
-    let status = Command::new("cargo")
-        .args(&[
-            "lambda",
-            "build",
-            "--release",
-            "--arm64",
-            "--output-format",
-            "zip",
-        ])
-        .status()?;
-
-    // Change back to original directory
-    std::env::set_current_dir("..")?;
-
-    if !status.success() {
-        return Err("Failed to build Lambda functions with cargo lambda".into());
-    }
-
-    println!("✓ Lambda functions built successfully with cargo lambda!");
-    Ok(())
-}
-
-fn get_lambda_zip(binary_name: &str) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    // cargo lambda creates zip files in target/lambda/{binary_name}/
-    let zip_path = format!(".rusteze/target/lambda/{}/bootstrap.zip", binary_name);
-
-    // Alternative path that cargo lambda might use
-    let alt_zip_path = format!(".rusteze/target/lambda/{}.zip", binary_name);
-
-    let final_path = if Path::new(&zip_path).exists() {
-        zip_path
-    } else if Path::new(&alt_zip_path).exists() {
-        alt_zip_path
-    } else {
-        // List available files for debugging
-        let lambda_dir = Path::new(".rusteze/target/lambda");
-        if lambda_dir.exists() {
-            println!("Available files in .rusteze/target/lambda/:");
-            if let Ok(entries) = fs::read_dir(lambda_dir) {
-                for entry in entries.flatten() {
-                    println!("  {}", entry.path().display());
-                }
-            }
-        }
-
-        return Err(format!(
-            "Lambda zip file not found. Tried:\n  - {}\n  - {}\nMake sure 'cargo lambda build --release --output-format zip' completed successfully.", 
-            zip_path, alt_zip_path
-        ).into());
-    };
-
-    // Read the zip file created by cargo lambda
-    let zip_data = fs::read(&final_path)?;
-    println!(
-        "✓ Loaded Lambda zip for {}: {} bytes",
-        binary_name,
-        zip_data.len()
-    );
-
-    Ok(zip_data)
-}
+use std::fs;
 
 pub async fn deploy_to_aws(
     config: &RustezeConfig,
@@ -179,93 +93,25 @@ pub async fn deploy_to_aws(
         );
 
         let function_name = format!("{}-{}", config.service_name, route_info.binary);
-        let zip_data = get_lambda_zip(&route_info.binary)?;
 
         println!("Role being used: {}", &role_arn);
 
-        // Try to create the function, or update if it exists
-        let result = lambda_client
-            .create_function()
-            .function_name(&function_name)
-            .runtime(aws_sdk_lambda::types::Runtime::Providedal2023)
-            .handler("bootstrap") // For custom runtime
-            .architectures(aws_sdk_lambda::types::Architecture::Arm64)
-            .code(
-                aws_sdk_lambda::types::FunctionCode::builder()
-                    .zip_file(zip_data.into())
-                    .build(),
-            )
-            .role(&role_arn)
-            .memory_size(
-                config
-                    .deployment
-                    .lambda
-                    .map(|l| l.memory_size as i32)
-                    .unwrap_or(256),
-            )
-            .timeout(30)
-            .send()
-            .await;
-
-        println!("Finished deploying lambda: {:?}", &result);
-
-        let function_arn = match result {
-            Ok(response) => {
-                println!("✓ Created new Lambda function: {}", function_name);
-                response.function_arn().unwrap().to_string()
-            }
+        let function_arn = match deploy_function(
+            &config,
+            &lambda_client,
+            &function_name,
+            &role_arn,
+            &route_info.binary,
+        )
+        .await
+        {
+            Ok(r) => r,
             Err(e) => {
-                // Check for specific AWS Lambda error types
-                if let Some(service_error) = e.as_service_error() {
-                    if service_error.is_resource_conflict_exception() {
-                        println!("Function exists, updating: {}", function_name);
-                        let update_result = lambda_client
-                            .update_function_code()
-                            .function_name(&function_name)
-                            .zip_file(get_lambda_zip(&route_info.binary)?.into())
-                            .send()
-                            .await?;
-                        println!("✓ Updated Lambda function: {}", function_name);
-                        update_result.function_arn().unwrap().to_string()
-                    } else {
-                        return Err(format!(
-                            "Failed to create function {}: {} (Code: {:?})",
-                            function_name,
-                            service_error,
-                            service_error.code()
-                        )
-                        .into());
-                    }
-                } else {
-                    // Fallback to string checking for other error types
-                    let error_string = e.to_string();
-                    if error_string.contains("ResourceConflictException")
-                        || error_string.contains("Function already exist")
-                        || error_string.contains("already exists")
-                    {
-                        println!(
-                            "Function exists (detected from error message), updating: {}",
-                            function_name
-                        );
-
-                        let update_result = lambda_client
-                            .update_function_code()
-                            .function_name(&function_name)
-                            .zip_file(get_lambda_zip(&route_info.binary)?.into())
-                            .send()
-                            .await?;
-                        println!("✓ Updated Lambda function: {}", function_name);
-                        update_result.function_arn().unwrap().to_string()
-                    } else {
-                        return Err(format!(
-                            "Failed to create/update function {}: {}",
-                            function_name, error_string
-                        )
-                        .into());
-                    }
-                }
+                panic!("Unable to deploy function update: {}", e)
             }
         };
+
+        println!("Finished deploying lambda: {:?}", &function_arn);
 
         deployed_functions.insert(route_name.clone(), (function_name.clone(), function_arn));
         println!("✓ Deployed Lambda function: {}", function_name);
@@ -283,81 +129,19 @@ pub async fn deploy_to_aws(
                 );
 
                 let function_name = format!("{}-{}", config.service_name, subscriber_info.binary);
-                let zip_data = get_lambda_zip(&subscriber_info.binary)?;
 
-                // @todo - move this to a helper - ISS-123
-                let result = lambda_client
-                    .create_function()
-                    .function_name(&function_name)
-                    .runtime(aws_sdk_lambda::types::Runtime::Providedal2023)
-                    .handler("bootstrap")
-                    .architectures(aws_sdk_lambda::types::Architecture::Arm64)
-                    .code(
-                        aws_sdk_lambda::types::FunctionCode::builder()
-                            .zip_file(zip_data.into())
-                            .build(),
-                    )
-                    .role(&role_arn)
-                    .memory_size(128)
-                    .timeout(30)
-                    .send()
-                    .await;
-
-                let function_arn = match result {
-                    Ok(response) => {
-                        println!("✓ Created new subscriber function: {}", function_name);
-                        response.function_arn().unwrap().to_string()
-                    }
+                let function_arn = match deploy_function(
+                    &config,
+                    &lambda_client,
+                    &function_name,
+                    &role_arn,
+                    &subscriber_info.binary,
+                )
+                .await
+                {
+                    Ok(r) => r,
                     Err(e) => {
-                        // Check for specific AWS Lambda error types
-                        if let Some(service_error) = e.as_service_error() {
-                            if service_error.is_resource_conflict_exception() {
-                                println!("Subscriber function exists, updating: {}", function_name);
-                                let update_result = lambda_client
-                                    .update_function_code()
-                                    .function_name(&function_name)
-                                    .zip_file(get_lambda_zip(&subscriber_info.binary)?.into())
-                                    .send()
-                                    .await?;
-                                println!("✓ Updated subscriber function: {}", function_name);
-                                update_result.function_arn().unwrap().to_string()
-                            } else {
-                                return Err(format!(
-                                    "Failed to create subscriber function {}: {} (Code: {:?})",
-                                    function_name,
-                                    service_error,
-                                    service_error.code()
-                                )
-                                .into());
-                            }
-                        } else {
-                            // Fallback to string checking
-                            let error_string = e.to_string();
-                            if error_string.contains("ResourceConflictException")
-                                || error_string.contains("Function already exist")
-                                || error_string.contains("already exists")
-                            {
-                                println!(
-                                    "Subscriber function exists (detected from error message), updating: {}",
-                                    function_name
-                                );
-
-                                let update_result = lambda_client
-                                    .update_function_code()
-                                    .function_name(&function_name)
-                                    .zip_file(get_lambda_zip(&subscriber_info.binary)?.into())
-                                    .send()
-                                    .await?;
-                                println!("✓ Updated subscriber function: {}", function_name);
-                                update_result.function_arn().unwrap().to_string()
-                            } else {
-                                return Err(format!(
-                                    "Failed to deploy subscriber function {}: {}",
-                                    function_name, error_string
-                                )
-                                .into());
-                            }
-                        }
+                        panic!("Unable to deploy function update: {}", e)
                     }
                 };
 
@@ -377,82 +161,19 @@ pub async fn deploy_to_aws(
             println!("Deploying auth function: {}", auth_name);
 
             let function_name = format!("{}-{}", config.service_name, auth_info.binary);
-            let zip_data = get_lambda_zip(&auth_info.binary)?;
 
-            //@todo - move this to a helper - ISS-123
-            let result = lambda_client
-                .create_function()
-                .function_name(&function_name)
-                .runtime(aws_sdk_lambda::types::Runtime::Providedal2023)
-                .handler("bootstrap")
-                .architectures(aws_sdk_lambda::types::Architecture::Arm64)
-                .code(
-                    aws_sdk_lambda::types::FunctionCode::builder()
-                        .zip_file(zip_data.into())
-                        .build(),
-                )
-                .role(&role_arn)
-                .memory_size(128)
-                .timeout(10)
-                .send()
-                .await;
-
-            let function_arn = match result {
-                Ok(response) => {
-                    println!("✓ Created new auth function: {}", function_name);
-                    response.function_arn().unwrap().to_string()
-                }
+            let function_arn = match deploy_function(
+                &config,
+                &lambda_client,
+                &function_name,
+                &role_arn,
+                &auth_info.binary,
+            )
+            .await
+            {
+                Ok(r) => r,
                 Err(e) => {
-                    // Check for specific AWS Lambda error types
-                    if let Some(service_error) = e.as_service_error() {
-                        if service_error.is_resource_conflict_exception() {
-                            println!("Auth function exists, updating: {}", function_name);
-
-                            let update_result = lambda_client
-                                .update_function_code()
-                                .function_name(&function_name)
-                                .zip_file(get_lambda_zip(&auth_info.binary)?.into())
-                                .send()
-                                .await?;
-                            println!("✓ Updated auth function: {}", function_name);
-                            update_result.function_arn().unwrap().to_string()
-                        } else {
-                            return Err(format!(
-                                "Failed to create auth function {}: {} (Code: {:?})",
-                                function_name,
-                                service_error,
-                                service_error.code()
-                            )
-                            .into());
-                        }
-                    } else {
-                        // Fallback to string checking
-                        let error_string = e.to_string();
-                        if error_string.contains("ResourceConflictException")
-                            || error_string.contains("Function already exist")
-                            || error_string.contains("already exists")
-                        {
-                            println!(
-                                "Auth function exists (detected from error message), updating: {}",
-                                function_name
-                            );
-
-                            let update_result = lambda_client
-                                .update_function_code()
-                                .function_name(&function_name)
-                                .zip_file(get_lambda_zip(&auth_info.binary)?.into())
-                                .send()
-                                .await?;
-                            println!("✓ Updated auth function: {}", function_name);
-                            update_result.function_arn().unwrap().to_string()
-                        } else {
-                            return Err(format!(
-                                "Failed to deploy auth function {}: {}",
-                                function_name, error_string
-                            )
-                            .into());
-                        }
-                    }
+                    panic!("Unable to deploy function update: {}", e)
                 }
             };
 
@@ -463,28 +184,14 @@ pub async fn deploy_to_aws(
     // Set up API Gateway
     println!("Setting up API Gateway...");
 
-    let api_name = &config.service_name;
-    let apis = api_client.get_apis().send().await?;
-    let existing_api = apis.items().iter().find(|a| a.name() == Some(api_name));
+    // let api_name = &config.service_name;
+    // let apis = api_client.get_apis().send().await?;
+    // let existing_api = apis.items().iter().find(|a| a.name() == Some(api_name));
 
-    let api_id = match existing_api {
-        Some(api) => {
-            println!("Using existing API Gateway: {}", api_name);
-            api.api_id().unwrap().to_string()
-        }
-        None => {
-            println!("Creating new API Gateway: {}", api_name);
-            let api = api_client
-                .create_api()
-                .name(api_name)
-                .protocol_type(aws_sdk_apigatewayv2::types::ProtocolType::Http)
-                .send()
-                .await?;
-            api.api_id().unwrap().to_string()
-        }
-    };
+    let api_gateway_id = build_api_gateway(config, &api_client).await?;
 
     // Create routes and integrations
+    // @todo - need to also remove old routes + integrations that no longer exist on the updated code.
     for (route_name, route_info) in &manifest.route {
         if let Some((function_name, function_arn)) = deployed_functions.get(route_name) {
             println!(
@@ -492,37 +199,72 @@ pub async fn deploy_to_aws(
                 route_info.method, route_info.path
             );
 
-            // Create integration
-            let integration = api_client
-                .create_integration()
-                .api_id(&api_id)
-                .integration_type(aws_sdk_apigatewayv2::types::IntegrationType::AwsProxy)
-                .integration_uri(format!(
-                    "arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations",
-                    config.deployment.region, function_arn
-                ))
-                .payload_format_version("2.0")
+            let integrations = api_client
+                .get_integrations()
+                .api_id(&api_gateway_id)
                 .send()
                 .await?;
+
+            let integration_uri = format!(
+                "arn:aws:apigateway:{}:lambda:path/2015-03-31/functions/{}/invocations",
+                config.deployment.region, function_arn
+            );
+
+            let existing_integration = integrations
+                .items()
+                .iter()
+                .find(|a| a.integration_uri() == Some(&integration_uri));
+
+            let integration_id = match existing_integration {
+                Some(int) => int.integration_id().unwrap().to_string(),
+                None => {
+                    // Create integration
+                    let integration = api_client
+                        .create_integration()
+                        .api_id(&api_gateway_id)
+                        .integration_type(aws_sdk_apigatewayv2::types::IntegrationType::AwsProxy)
+                        .integration_uri(&integration_uri)
+                        .payload_format_version("2.0")
+                        .send()
+                        .await?;
+
+                    integration.integration_id().unwrap().to_string()
+                }
+            };
 
             // Create route
             let route_key = format!("{} {}", route_info.method, route_info.path);
-            api_client
-                .create_route()
-                .api_id(&api_id)
-                .route_key(&route_key)
-                .target(format!(
-                    "integrations/{}",
-                    integration.integration_id().unwrap()
-                ))
+
+            // Check to see if a route key exists.
+            let created_routes = api_client
+                .get_routes()
+                .api_id(&api_gateway_id)
                 .send()
                 .await?;
 
+            let found_route = created_routes
+                .items()
+                .iter()
+                .find(|r| r.route_key() == Some(&route_key));
+
+            let _route = match found_route {
+                Some(r) => {}
+                None => {
+                    let r = api_client
+                        .create_route()
+                        .api_id(&api_gateway_id)
+                        .route_key(&route_key)
+                        .target(format!("integrations/{}", integration_id))
+                        .send()
+                        .await?;
+                }
+            };
+
             // Add Lambda permission for API Gateway to invoke the function
-            let statement_id = format!("apigateway-{}-{}", api_id, route_name);
+            let statement_id = format!("apigateway-{}-{}", api_gateway_id, route_name);
             let _ = lambda_client
                 .add_permission()
-                .function_name(function_name)
+                .function_name(function_name.clone())
                 .statement_id(&statement_id)
                 .action("lambda:InvokeFunction")
                 .principal("apigateway.amazonaws.com")
@@ -530,7 +272,7 @@ pub async fn deploy_to_aws(
                     "arn:aws:execute-api:{}:{}:{}/*/*",
                     config.deployment.region,
                     get_account_id().await?,
-                    api_id
+                    api_gateway_id
                 ))
                 .send()
                 .await; // Ignore errors as permission might already exist
@@ -543,7 +285,7 @@ pub async fn deploy_to_aws(
     let stage_name = "prod";
     let _ = api_client
         .create_stage()
-        .api_id(&api_id)
+        .api_id(&api_gateway_id)
         .stage_name(stage_name)
         .auto_deploy(true)
         .send()
@@ -551,7 +293,7 @@ pub async fn deploy_to_aws(
 
     let api_url = format!(
         "https://{}.execute-api.{}.amazonaws.com/{}",
-        api_id, config.deployment.region, stage_name
+        api_gateway_id, config.deployment.region, stage_name
     );
 
     // Update manifest with deployed ARNs
@@ -560,11 +302,11 @@ pub async fn deploy_to_aws(
         &deployed_functions,
         &deployed_auth_functions,
         &deployed_subscriber_functions,
-        &api_id,
+        &api_gateway_id,
     )?;
 
     println!("\n🚀 Deployment complete!");
-    println!("API Gateway ID: {}", api_id);
+    println!("API Gateway ID: {}", api_gateway_id);
     println!("API URL: {}", api_url);
     println!("\nAvailable endpoints:");
 
@@ -786,7 +528,7 @@ fn update_manifest_with_arns(
     deployed_functions: &HashMap<String, (String, String)>,
     deployed_auth_functions: &HashMap<String, (String, String)>,
     deployed_subscriber_functions: &HashMap<String, (String, String)>,
-    api_id: &str,
+    api_gateway_id: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Update route ARNs
     for (route_name, route_info) in manifest.route.iter_mut() {
@@ -824,7 +566,7 @@ fn update_manifest_with_arns(
 
     // Update project deployment info
     if let Some(ref mut deployment) = manifest.deployment {
-        deployment.arn = Some(format!("api-gateway:{}", api_id));
+        deployment.arn = Some(format!("api-gateway:{}", api_gateway_id));
     }
 
     // Write updated manifest back to file

@@ -1,6 +1,4 @@
 use std::env;
-use std::net::SocketAddr;
-use std::process;
 
 use rusteze_cargo::commands::Commander;
 use rusteze_cargo::deploy::init_deploy_command;
