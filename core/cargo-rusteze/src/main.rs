@@ -3,22 +3,15 @@ use std::env;
 use rusteze_cargo::commands::Commander;
 use rusteze_cargo::deploy::init_deploy_command;
 use rusteze_cargo::serve::init_serve_command;
+use tracing::{debug, error};
 
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = env::args().collect();
 
     let mut command_service = Commander::new();
-    println!("Created commander");
-
     command_service.register_command(init_serve_command());
-    println!("Registered serve command");
-
     command_service.register_command(init_deploy_command());
-    println!("Registered deploy command");
-
-    println!("args: {:?}", &args);
-    println!("Starting command processing...");
 
     // Parse command line arguments
     // When called as "cargo rusteze deploy", args are: [binary, "rusteze", "deploy"]
@@ -29,20 +22,20 @@ async fn main() {
         1
     };
 
-    println!(
+    debug!(
         "Args length: {}, command_index: {}",
         args.len(),
         command_index
     );
 
     if args.len() < command_index + 1 {
-        println!("Not enough arguments, showing usage");
+        error!("Not enough arguments, showing usage");
         command_service.print_usage();
         return;
     }
 
     let command = &args[command_index];
-    println!("Looking for command: '{}'", command);
+    debug!("Looking for command: '{}'", command);
 
     command_service.match_command(command, &args).await;
 }

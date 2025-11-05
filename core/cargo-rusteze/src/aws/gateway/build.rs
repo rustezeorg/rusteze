@@ -3,6 +3,7 @@ use std::fmt::Display;
 
 use crate::RustezeConfig;
 use aws_sdk_apigatewayv2::Client as ApiGatewayClient;
+use tracing::{debug, info};
 
 #[derive(Debug)]
 pub enum ApiGatewayDeploymentError {
@@ -46,7 +47,7 @@ pub async fn build_api_gateway(
 
     let api_id = match existing_api {
         Some(api) => {
-            println!(
+            debug!(
                 "Using existing API Gateway: {} - {:?}",
                 api_name,
                 &api.api_endpoint().unwrap()
@@ -60,7 +61,7 @@ pub async fn build_api_gateway(
             id
         }
         None => {
-            println!("Creating new API Gateway: {}", api_name);
+            info!("Creating new API Gateway: {}", api_name);
             let api = match api_client
                 .create_api()
                 .name(api_name)

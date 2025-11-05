@@ -2,14 +2,14 @@ use crate::RustezeConfig;
 use aws_config::retry::ProvideErrorKind;
 use aws_sdk_lambda::Client as LambdaClient;
 use aws_sdk_lambda::types::LastUpdateStatus;
-use aws_sdk_sts::error::ProvideErrorMetadata;
 use core::fmt;
 use std::fmt::Display;
 use std::time::Duration;
 use std::{fs, path::Path, process::Command};
+use tracing::{debug, info};
 
 pub fn build_lambda_functions() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!("Building Lambda functions with cargo lambda...");
+    info!("Building Lambda functions with cargo lambda...");
 
     // Check if cargo lambda is installed
     let check_status = Command::new("cargo")
@@ -18,7 +18,7 @@ pub fn build_lambda_functions() -> Result<(), Box<dyn std::error::Error + Send +
 
     match check_status {
         Ok(output) if output.status.success() => {
-            println!(
+            info!(
                 "✓ cargo-lambda found: {}",
                 String::from_utf8_lossy(&output.stdout).trim()
             );
@@ -53,7 +53,7 @@ pub fn build_lambda_functions() -> Result<(), Box<dyn std::error::Error + Send +
         return Err("Failed to build Lambda functions with cargo lambda".into());
     }
 
-    println!("✓ Lambda functions built successfully with cargo lambda!");
+    info!("✓ Lambda functions built successfully with cargo lambda!");
     Ok(())
 }
 
@@ -72,10 +72,10 @@ fn get_lambda_zip(binary_name: &str) -> Result<Vec<u8>, Box<dyn std::error::Erro
         // List available files for debugging
         let lambda_dir = Path::new(".rusteze/target/lambda");
         if lambda_dir.exists() {
-            println!("Available files in .rusteze/target/lambda/:");
+            debug!("Available files in .rusteze/target/lambda/:");
             if let Ok(entries) = fs::read_dir(lambda_dir) {
                 for entry in entries.flatten() {
-                    println!("  {}", entry.path().display());
+                    debug!("  {}", entry.path().display());
                 }
             }
         }
@@ -88,7 +88,7 @@ fn get_lambda_zip(binary_name: &str) -> Result<Vec<u8>, Box<dyn std::error::Erro
 
     // Read the zip file created by cargo lambda
     let zip_data = fs::read(&final_path)?;
-    println!(
+    debug!(
         "✓ Loaded Lambda zip for {}: {} bytes",
         binary_name,
         zip_data.len()
@@ -119,7 +119,7 @@ async fn is_function_ready(
     function_name: String,
 ) -> Result<bool, DeployFunctionError> {
     // Get the function.
-    println!("Checking {} function is ready!", &function_name);
+    debug!("Checking {} function is ready!", &function_name);
     let func = match lambda_client
         .get_function()
         .function_name(function_name)
@@ -140,7 +140,7 @@ async fn is_function_ready(
                 LastUpdateStatus::Successful => return Ok(true),
                 LastUpdateStatus::InProgress => return Ok(false),
                 _ => {
-                    println!("LambdaUpdateStatus unknown");
+                    debug!("LambdaUpdateStatus unknown");
                     return Err(DeployFunctionError::DeploymentError(
                         "Lambda update status is unknown".to_string(),
                     ));
@@ -184,7 +184,7 @@ pub async fn deploy_function(
     // @todo - Update the architecture to pull from config.
     let arn = match existing_function {
         Some(f) => {
-            println!("Function exists, updating: {}", function_name);
+            debug!("Function exists, updating: {}", function_name);
 
             let update_result = lambda_client
                 .update_function_code()
@@ -196,7 +196,7 @@ pub async fn deploy_function(
 
             let updated_function_arn = match update_result {
                 Ok(res) => {
-                    println!("✓ Updated Lambda function: {}", function_name);
+                    debug!("✓ Updated Lambda function: {}", function_name);
 
                     while !is_function_ready(&lambda_client, function_name.to_string())
                         .await
@@ -279,7 +279,7 @@ pub async fn deploy_function(
 
             let function_arn = match result {
                 Ok(response) => {
-                    println!("✓ Created new Lambda function: {}", function_name);
+                    debug!("✓ Created new Lambda function: {}", function_name);
                     response.function_arn().unwrap().to_string()
                 }
                 Err(e) => {

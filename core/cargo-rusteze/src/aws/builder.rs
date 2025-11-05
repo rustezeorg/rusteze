@@ -6,6 +6,7 @@ use aws_sdk_iam::Client as IamClient;
 use aws_sdk_lambda::Client as LambdaClient;
 use aws_sdk_sts::error::ProvideErrorMetadata;
 use rusteze_config::RoutesConfig as Manifest;
+use tracing::{debug, error, info};
 
 use crate::aws::lambda::build::{build_lambda_functions, deploy_function};
 use std::collections::HashMap;
@@ -14,22 +15,20 @@ use std::fs;
 pub async fn deploy_to_aws(
     config: &RustezeConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    println!(
+    info!(
         "Starting AWS deployment for service: {}",
         config.service_name
     );
 
     // Read the manifest file
     let manifest_content = fs::read_to_string(".rusteze/manifest.json")?;
-    println!("Loading manifest: {}", &manifest_content);
+    debug!("Loading manifest: {}", &manifest_content);
     let mut manifest: Manifest = serde_json::from_str(&manifest_content)?;
-    println!("manifest loaded! Building functions");
+    debug!("manifest loaded! Building functions");
 
-    // Build all Lambda functions
     build_lambda_functions()?;
 
-    // Set up AWS clients
-    println!(
+    debug!(
         "Setting up AWS clients for region: {}",
         config.deployment.region
     );
@@ -40,17 +39,17 @@ pub async fn deploy_to_aws(
         .load()
         .await;
 
-    println!("AWS region: {:?}", shared_config.region());
+    debug!("AWS region: {:?}", shared_config.region());
 
     let lambda_client = LambdaClient::new(&shared_config);
     let api_client = ApiGatewayClient::new(&shared_config);
     let iam_client = IamClient::new(&shared_config);
 
     // Get account ID first to verify credentials work
-    println!("Verifying AWS credentials...");
+    debug!("Verifying AWS credentials...");
     let account_id = match get_account_id().await {
         Ok(id) => {
-            println!("✓ AWS Account ID: {}", id);
+            debug!("✓ AWS Account ID: {}", id);
             id
         }
         Err(e) => {
@@ -63,7 +62,7 @@ pub async fn deploy_to_aws(
     };
 
     // Ensure Lambda execution role exists
-    println!("Setting up IAM role for Lambda execution...");
+    debug!("Setting up IAM role for Lambda execution...");
     let role_arn = match ensure_lambda_execution_role(&iam_client, &account_id).await {
         Ok(arn) => arn,
         Err(e) => {
@@ -87,14 +86,14 @@ pub async fn deploy_to_aws(
     let mut deployed_functions = HashMap::new();
 
     for (route_name, route_info) in &manifest.route {
-        println!(
+        debug!(
             "Deploying Lambda function for route: {} {} {}",
             route_info.method, route_info.path, route_name
         );
 
         let function_name = format!("{}-{}", config.service_name, route_info.binary);
 
-        println!("Role being used: {}", &role_arn);
+        debug!("Role being used: {}", &role_arn);
 
         let function_arn = match deploy_function(
             &config,
@@ -111,10 +110,10 @@ pub async fn deploy_to_aws(
             }
         };
 
-        println!("Finished deploying lambda: {:?}", &function_arn);
+        debug!("Finished deploying lambda: {:?}", &function_arn);
 
         deployed_functions.insert(route_name.clone(), (function_name.clone(), function_arn));
-        println!("✓ Deployed Lambda function: {}", function_name);
+        debug!("✓ Deployed Lambda function: {}", function_name);
     }
 
     // Deploy topic subscriber functions
@@ -123,7 +122,7 @@ pub async fn deploy_to_aws(
     if let Some(ref topic_map) = manifest.topic {
         for (topic_name, topic_info) in topic_map {
             for (subscriber_name, subscriber_info) in &topic_info.subscribers {
-                println!(
+                debug!(
                     "Deploying subscriber function: {} for topic: {}",
                     subscriber_name, topic_name
                 );
@@ -158,7 +157,7 @@ pub async fn deploy_to_aws(
 
     if let Some(ref auth_map) = manifest.auth {
         for (auth_name, auth_info) in auth_map {
-            println!("Deploying auth function: {}", auth_name);
+            debug!("Deploying auth function: {}", auth_name);
 
             let function_name = format!("{}-{}", config.service_name, auth_info.binary);
 
@@ -182,19 +181,14 @@ pub async fn deploy_to_aws(
     }
 
     // Set up API Gateway
-    println!("Setting up API Gateway...");
-
-    // let api_name = &config.service_name;
-    // let apis = api_client.get_apis().send().await?;
-    // let existing_api = apis.items().iter().find(|a| a.name() == Some(api_name));
+    debug!("Setting up API Gateway...");
 
     let api_gateway_id = build_api_gateway(config, &api_client).await?;
 
-    // Create routes and integrations
     // @todo - need to also remove old routes + integrations that no longer exist on the updated code.
     for (route_name, route_info) in &manifest.route {
         if let Some((function_name, function_arn)) = deployed_functions.get(route_name) {
-            println!(
+            debug!(
                 "Creating API route: {} {}",
                 route_info.method, route_info.path
             );
@@ -277,7 +271,7 @@ pub async fn deploy_to_aws(
                 .send()
                 .await; // Ignore errors as permission might already exist
 
-            println!("✓ Created route: {}", route_key);
+            info!("✓ Created route: {}", route_key);
         }
     }
 
@@ -305,13 +299,13 @@ pub async fn deploy_to_aws(
         &api_gateway_id,
     )?;
 
-    println!("\n🚀 Deployment complete!");
-    println!("API Gateway ID: {}", api_gateway_id);
-    println!("API URL: {}", api_url);
-    println!("\nAvailable endpoints:");
+    info!("\n🚀 Deployment complete!");
+    info!("API Gateway ID: {}", api_gateway_id);
+    info!("API URL: {}", api_url);
+    info!("\nAvailable endpoints:");
 
     for (_, route_info) in &manifest.route {
-        println!(
+        debug!(
             "  {} {} -> {}{}",
             route_info.method, route_info.path, api_url, route_info.path
         );
@@ -341,30 +335,29 @@ async fn ensure_lambda_execution_role(
     let role_name = "lambda-execution-role";
     let role_arn = format!("arn:aws:iam::{}:role/{}", account_id, role_name);
 
-    println!("Checking for Lambda execution role: {}", role_name);
+    debug!("Checking for Lambda execution role: {}", role_name);
 
     // Check if role exists
     match iam_client.get_role().role_name(role_name).send().await {
         Ok(role_response) => {
-            println!("✓ Lambda execution role already exists: {}", role_name);
+            debug!("✓ Lambda execution role already exists: {}", role_name);
 
             // Verify the role has the correct trust policy
             if let Some(role) = role_response.role() {
                 if let Some(trust_policy) = role.assume_role_policy_document() {
                     if !trust_policy.contains("lambda.amazonaws.com") {
-                        println!(
+                        info!(
                             "⚠️  Warning: Existing role may not have correct trust policy for Lambda"
                         );
-                        println!(
+                        info!(
                             "Trust policy should contain 'lambda.amazonaws.com' service principal"
                         );
                     } else {
-                        println!("✓ Role has correct Lambda trust policy");
+                        info!("✓ Role has correct Lambda trust policy");
                     }
                 }
             }
 
-            // Check if the basic execution policy is attached
             let policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole";
             match iam_client
                 .list_attached_role_policies()
@@ -379,20 +372,20 @@ async fn ensure_lambda_execution_role(
                         .any(|p| p.policy_arn() == Some(policy_arn));
 
                     if !has_basic_policy {
-                        println!("⚠️  Attaching missing AWSLambdaBasicExecutionRole policy...");
+                        info!("⚠️  Attaching missing AWSLambdaBasicExecutionRole policy...");
                         iam_client
                             .attach_role_policy()
                             .role_name(role_name)
                             .policy_arn(policy_arn)
                             .send()
                             .await?;
-                        println!("✓ Attached AWSLambdaBasicExecutionRole policy");
+                        info!("✓ Attached AWSLambdaBasicExecutionRole policy");
                     } else {
-                        println!("✓ Role has required execution policy");
+                        info!("✓ Role has required execution policy");
                     }
                 }
                 Err(e) => {
-                    println!("⚠️  Could not check attached policies: {}", e);
+                    error!("⚠️  Could not check attached policies: {}", e);
                 }
             }
 
@@ -401,9 +394,9 @@ async fn ensure_lambda_execution_role(
         Err(e) => {
             // Check for specific error types
             if let Some(service_error) = e.as_service_error() {
-                println!("IAM service error: {:?}", service_error);
+                debug!("IAM service error: {:?}", service_error);
                 if service_error.is_no_such_entity_exception() {
-                    println!("Role doesn't exist, will create it");
+                    info!("Role doesn't exist, will create it");
                 } else {
                     return Err(format!(
                         "Error checking for role '{}': {} (Code: {:?})",
@@ -425,7 +418,7 @@ async fn ensure_lambda_execution_role(
         }
     }
 
-    println!("Creating Lambda execution role: {}", role_name);
+    debug!("Creating Lambda execution role: {}", role_name);
 
     // Trust policy document for Lambda - ensure proper JSON formatting
     let trust_policy = r#"{
@@ -450,7 +443,7 @@ async fn ensure_lambda_execution_role(
         .send()
         .await
     {
-        Ok(_) => println!("✓ Successfully created role: {}", role_name),
+        Ok(_) => info!("✓ Successfully created role: {}", role_name),
         Err(e) => {
             if let Some(service_error) = e.as_service_error() {
                 return Err(format!(
@@ -481,7 +474,7 @@ async fn ensure_lambda_execution_role(
         .send()
         .await
     {
-        Ok(_) => println!("✓ Successfully attached policy: {}", policy_arn),
+        Ok(_) => info!("✓ Successfully attached policy: {}", policy_arn),
         Err(e) => {
             if let Some(service_error) = e.as_service_error() {
                 return Err(format!(
@@ -503,15 +496,15 @@ async fn ensure_lambda_execution_role(
         }
     }
 
-    println!("✓ Created Lambda execution role: {}", role_name);
+    info!("✓ Created Lambda execution role: {}", role_name);
 
     // Wait a moment for the role to propagate in AWS
-    println!("Waiting for role to propagate...");
+    info!("Waiting for role to propagate...");
     tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
     // Verify the role was created and can be retrieved
     match iam_client.get_role().role_name(role_name).send().await {
-        Ok(_) => println!("✓ Role propagation verified"),
+        Ok(_) => info!("✓ Role propagation verified"),
         Err(e) => {
             return Err(format!(
                 "Role was created but cannot be retrieved (propagation issue): {}",

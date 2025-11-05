@@ -21,6 +21,7 @@ aws-sdk-iam = {version = "1.0", optional = true }
 rusteze = { path = "../lib" }
 rusteze_config = {path = "../config"}
 openssl = { version = "0.10.35", features = ["vendored"] }
+tracing = "0.1.41"
 
 [features]
 default = ["aws"]

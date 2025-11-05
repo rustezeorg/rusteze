@@ -9,7 +9,7 @@
   <a href="https://github.com/rustezeorg/rusteze/search?l=rust">
     <img alt="language" src="https://img.shields.io/badge/language-Rust-orange.svg">
   </a>
-  <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/rustezeorg/rusteze/test">
+  <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/rustezeorg/rusteze/test.yml">
 </p>
 
 > [!CAUTION]
@@ -145,9 +145,3 @@ cargo build --bin handle_user_event_subscriber
   - [ ] GCP
   - [ ] Container
 - [ ] Release to crates
-
-- need to fix api gateway updates.
-  - Need to fix removal of routes + integrations when not in code anymore.
-- implement tracing: https://crates.io/crates/tracing
-- Issue when ARN hasn't been saved, or when .rusteze folder is deleted, you lose the ARN's leading to multiple deployments, wonder if the manifest.json should move outside.
-- Issue when running serve locally with missing env var: WS_LAMBDA_FUNCTION_NAME
