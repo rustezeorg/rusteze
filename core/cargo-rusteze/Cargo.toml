@@ -2,6 +2,8 @@
 name = "rusteze-cargo"
 version = "0.1.0"
 edition = "2024"
+description = "Rusteze cargo commands."
+license = "MPL-2.0"
 
 [[bin]]
 name = "cargo-rusteze"
