@@ -2,9 +2,15 @@
 resolver = "2"
 
 members = [
-    "core/config",
+    "core/common",
     "core/codegen",
     "core/lib",
     "core/cargo-rusteze",
     "examples/hello-world"
 ]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/rustezeorg/rusteze"

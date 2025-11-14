@@ -122,6 +122,8 @@ cargo build --bin handle_user_event_subscriber
 
 ## Deployments
 
+AWS currently is the only provider that can be deployed.
+
 ### Development
 
 - [x] Local dev server

@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use rusteze_config::ParameterConfig;
+use rusteze_common::ParameterConfig;
 use serde::{Deserialize, Serialize};
 use std::fs::read_to_string;
 use std::io::Write;

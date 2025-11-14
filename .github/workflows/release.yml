@@ -1,0 +1,26 @@
+name: Rust Crate Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Login to crates.io
+        run: cargo login ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: publish common package
+        run: cargo publish -p rusteze-common
+      - name: publish codegen package
+        run: cargo publish -p rusteze-codegen
+      - name: publish lib package
+        run: cargo publish -p rusteze
+      - name: publish cargo cli package
+        run: cargo publish -p cargo-rusteze

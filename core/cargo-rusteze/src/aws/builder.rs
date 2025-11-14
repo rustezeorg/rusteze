@@ -5,7 +5,7 @@ use aws_sdk_apigatewayv2::Client as ApiGatewayClient;
 use aws_sdk_iam::Client as IamClient;
 use aws_sdk_lambda::Client as LambdaClient;
 use aws_sdk_sts::error::ProvideErrorMetadata;
-use rusteze_config::RoutesConfig as Manifest;
+use rusteze_common::RoutesConfig as Manifest;
 use tracing::{debug, error, info};
 
 use crate::aws::lambda::build::{build_lambda_functions, deploy_function};

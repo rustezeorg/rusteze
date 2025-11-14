@@ -6,7 +6,7 @@ use std::{
 };
 
 // use rust
-use rusteze_config::{
+use rusteze_common::{
     AuthConfig, AuthHandlerConfig, DeploymentConfig, ParameterConfig, ProjectConfig, RouteConfig,
     RoutesConfig, SubscriberConfig, TopicConfig,
 };

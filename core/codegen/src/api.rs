@@ -1,5 +1,5 @@
 use quote::quote;
-use rusteze_config::ParameterConfig;
+use rusteze_common::ParameterConfig;
 use syn::ItemFn;
 
 fn clean_type_string(type_str: &str) -> String {

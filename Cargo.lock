@@ -755,6 +755,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo-rusteze"
+version = "0.1.0"
+dependencies = [
+ "aws-config",
+ "aws-sdk-apigatewayv2",
+ "aws-sdk-iam",
+ "aws-sdk-lambda",
+ "aws-sdk-sts",
+ "openssl",
+ "rusteze",
+ "rusteze-common",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "tracing",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2378,8 +2397,8 @@ dependencies = [
  "proc-macro2",
  "quote",
  "reqwest",
- "rusteze_codegen",
- "rusteze_config",
+ "rusteze-codegen",
+ "rusteze-common",
  "serde",
  "serde_json",
  "syn",
@@ -2388,26 +2407,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusteze-cargo"
-version = "0.1.0"
-dependencies = [
- "aws-config",
- "aws-sdk-apigatewayv2",
- "aws-sdk-iam",
- "aws-sdk-lambda",
- "aws-sdk-sts",
- "openssl",
- "rusteze",
- "rusteze_config",
- "serde",
- "serde_json",
- "tokio",
- "toml",
- "tracing",
-]
-
-[[package]]
-name = "rusteze_codegen"
+name = "rusteze-codegen"
 version = "0.1.0"
 dependencies = [
  "aws-config",
@@ -2417,7 +2417,7 @@ dependencies = [
  "lazy_static",
  "proc-macro2",
  "quote",
- "rusteze_config",
+ "rusteze-common",
  "serde",
  "serde_json",
  "syn",
@@ -2425,7 +2425,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusteze_config"
+name = "rusteze-common"
 version = "0.1.0"
 dependencies = [
  "serde",

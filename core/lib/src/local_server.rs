@@ -28,7 +28,7 @@ use tokio::{
 };
 
 use aws_lambda_events::chrono::{self, DateTime, Utc};
-use rusteze_config::{DeploymentConfig, ParameterConfig, ProjectConfig, RoutesConfig};
+use rusteze_common::{DeploymentConfig, ParameterConfig, ProjectConfig, RoutesConfig};
 
 use crate::pubsub::service::{PubSubMessage, PubSubService, SnsRecord, SnsRecords};
 

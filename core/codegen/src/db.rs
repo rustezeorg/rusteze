@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::Path;
 
 use crate::config::get_config;
-use rusteze_config::DbConfig;
+use rusteze_common::DbConfig;
 
 pub fn get_db_attributes(attr_str: String) -> String {
     let mut db_name = "unknown-database".to_string();

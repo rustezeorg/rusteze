@@ -1,8 +1,8 @@
 use std::env;
 
-use rusteze_cargo::commands::Commander;
-use rusteze_cargo::deploy::init_deploy_command;
-use rusteze_cargo::serve::init_serve_command;
+use cargo_rusteze::commands::Commander;
+use cargo_rusteze::deploy::init_deploy_command;
+use cargo_rusteze::serve::init_serve_command;
 use tracing::{debug, error};
 
 #[tokio::main]
