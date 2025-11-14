@@ -23,31 +23,22 @@ pub fn init_serve_command() -> Command {
 pub async fn serve_command(args: Vec<String>) {
     println!("Running serve command with args {:?}", args);
 
-    // Find the index of "serve" command and check for subcommands after it
-    let serve_index = args.iter().position(|arg| arg == "serve").unwrap_or(0);
-    let subcommand_index = serve_index + 1;
-
-    if args.len() > subcommand_index {
-        let subcommand = &args[subcommand_index];
-
-        match subcommand.as_str() {
-            "help" | "--help" | "-h" => {
-                println!("{}", HELP_TEXT);
-                return;
-            }
-            _ => {
-                // If it starts with -, it's a flag, otherwise it's an unknown command
-                if !subcommand.starts_with('-') {
-                    println!("Unknown subcommand: {}", subcommand);
-                    process::exit(1);
-                }
-            }
-        };
+    // Check for help flags in any position
+    if args
+        .iter()
+        .any(|arg| arg == "help" || arg == "--help" || arg == "-h")
+    {
+        println!("{}", HELP_TEXT);
+        return;
     }
 
     let port = parse_port(&args).unwrap_or(3000);
     let hot_reload = parse_hot_reload(&args);
-    let _ = start_dev_server(port, hot_reload).await;
+
+    match start_dev_server(port, hot_reload).await {
+        Ok(_) => println!("Dev server completed successfully"),
+        Err(e) => println!("Dev server error: {:?}", e),
+    }
 }
 
 fn parse_port(args: &[String]) -> Option<u16> {

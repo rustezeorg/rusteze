@@ -293,7 +293,7 @@ fn get_binary_path(binary_name: &str) -> PathBuf {
     binary_path
 }
 
-async fn run_binary_handler(binary_name: &str, args: Vec<String>) -> Result<()> {
+async fn run_binary_handler(binary_name: &str, args: Vec<String>) -> Result<String> {
     let binary_path = get_binary_path(binary_name);
 
     println!(
@@ -304,24 +304,26 @@ async fn run_binary_handler(binary_name: &str, args: Vec<String>) -> Result<()> 
     let mut child = Command::new(binary_path)
         .env("RUSTEZE_LOCAL", "true")
         .env("RUSTEZE_PORT", "3000")
-        // These are lambda specific
+        // These are lambda specific (for local simulation only, not actual runtime)
         .env("AWS_LAMBDA_FUNCTION_NAME", &binary_name)
         .env("AWS_LAMBDA_FUNCTION_MEMORY_SIZE", "128")
         .env("AWS_LAMBDA_FUNCTION_VERSION", "1.0")
-        .env("AWS_LAMBDA_RUNTIME_API", "1.0")
+        // Note: AWS_LAMBDA_RUNTIME_API is NOT set here - it's only present in actual Lambda runtime
         .args(&args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
+    let mut stdout_output = String::new();
+
     if let Some(stdout) = child.stdout.take() {
         let mut reader = BufReader::new(stdout).lines();
         let stdout_handler_name = binary_name.to_string();
-        tokio::spawn(async move {
-            while let Ok(Some(line)) = reader.next_line().await {
-                println!("[stdout {}] {}", &stdout_handler_name, line)
-            }
-        });
+        while let Ok(Some(line)) = reader.next_line().await {
+            println!("[stdout {}] {}", &stdout_handler_name, line);
+            stdout_output.push_str(&line);
+            stdout_output.push('\n');
+        }
     }
 
     if let Some(stderr) = child.stderr.take() {
@@ -338,7 +340,7 @@ async fn run_binary_handler(binary_name: &str, args: Vec<String>) -> Result<()> 
 
     if status.success() {
         println!("Handler finished successfully.");
-        Ok(())
+        Ok(stdout_output.trim().to_string())
     } else {
         anyhow::bail!("Handler binary failed: {}", status);
     }
@@ -349,7 +351,7 @@ async fn run_handler_binary_with_params(
     route: &RouteEntry,
     path_params: std::collections::HashMap<String, String>,
     body: &[u8],
-) -> Result<()> {
+) -> Result<String> {
     // let binary_path = get_binary_path(binary_name);
 
     // Build command line arguments based on function parameters
@@ -404,8 +406,8 @@ async fn run_handler_binary_with_params(
         }
     }
 
-    let _ = run_binary_handler(binary_name, args).await;
-    Ok(())
+    let output = run_binary_handler(binary_name, args).await?;
+    Ok(output)
 }
 
 fn extract_path_params_from_uri(

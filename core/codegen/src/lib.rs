@@ -90,6 +90,8 @@ pub fn route(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     // Generate generic parameter handling and function call
     let (param_setup, function_call) = api::generate_generic_proxy_code(&func, &path);
+    let (local_param_setup, local_function_call) =
+        api::generate_local_mode_proxy_code(&func, &path);
 
     // Get the crate name from Cargo.toml
     let manifest_path = Path::new(&manifest_dir).join("Cargo.toml");
@@ -136,10 +138,29 @@ async fn function_handler(event: Request) -> Result<Response<String>, Error> {{
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {{
-    run(service_fn(function_handler)).await
+    // Check if running in local mode
+    if std::env::var("RUSTEZE_LOCAL").unwrap_or_default() == "true" {{
+        eprintln!("Running in local mode (not Lambda runtime)");
+{}
+        let result = {}.await;
+        
+        // Print result to stdout for local server to capture
+        println!("{{}}", serde_json::to_string(&result).unwrap_or_else(|_| result.to_string()));
+        Ok(())
+    }} else {{
+        // Run in Lambda mode
+        run(service_fn(function_handler)).await
+    }}
 }}
 "#,
-        method, path, crate_name, func_str, param_setup, function_call
+        method,
+        path,
+        crate_name,
+        func_str,
+        param_setup,
+        function_call,
+        local_param_setup,
+        local_function_call
     );
 
     let mut f = File::create(&proxy_path).unwrap();
@@ -365,10 +386,36 @@ async fn function_handler(event: LambdaEvent<SqsEvent>) -> Result<(), Error> {{
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {{
-    run(service_fn(function_handler)).await
+    // Check if running in local mode
+    if std::env::var("RUSTEZE_LOCAL").unwrap_or_default() == "true" {{
+        eprintln!("Running subscriber in local mode (not Lambda runtime)");
+        
+        // Read message from command line args
+        let args: Vec<String> = std::env::args().collect();
+        if args.len() > 1 {{
+            let message_json = &args[1];
+            match serde_json::from_str(message_json) {{
+                Ok(payload) => {{
+                    let result = {}(payload).await;
+                    eprintln!("Subscriber processed message: {{:?}}", result);
+                    Ok(())
+                }}
+                Err(e) => {{
+                    eprintln!("Failed to parse message: {{}}", e);
+                    Err(e.into())
+                }}
+            }}
+        }} else {{
+            eprintln!("No message provided");
+            Ok(())
+        }}
+    }} else {{
+        // Run in Lambda mode
+        run(service_fn(function_handler)).await
+    }}
 }}
 "#,
-        topic, crate_name, func_str, func_name, func_name
+        topic, crate_name, func_str, func_name, func_name, func_name
     );
 
     let mut f = File::create(&proxy_path).unwrap();
@@ -482,10 +529,24 @@ async fn function_handler(event: Request) -> Result<Response<String>, Error> {{
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {{
-    run(service_fn(function_handler)).await
+    // Check if running in local mode
+    if std::env::var("RUSTEZE_LOCAL").unwrap_or_default() == "true" {{
+        eprintln!("Running auth handler in local mode (not Lambda runtime)");
+        
+        // Call the auth handler directly
+        {}().await;
+        eprintln!("Auth check passed");
+        
+        // Print result to stdout
+        println!("{{}}", json!({{"authorized": true}}));
+        Ok(())
+    }} else {{
+        // Run in Lambda mode
+        run(service_fn(function_handler)).await
+    }}
 }}
 "#,
-        crate_name, func_name
+        crate_name, func_name, func_name
     );
 
     let mut f = File::create(&proxy_path).unwrap();
