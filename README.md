@@ -1,7 +1,7 @@
 # Rusteze
 
 <p align="center">
-  <img src="./logo.webp" alt="rusteze-logo" width="400"/>
+  <img src="./logo.png" alt="rusteze-logo" width="400"/>
 </p>
 <p align="center">"You too can deploy with ease"</p>
 <br>
@@ -35,8 +35,7 @@ cargo install cargo-lambda
 ### Install Rusteze
 
 ```bash
-# Install from source (for now)
-cargo install --git https://github.com/rustezeorg/rusteze/tree/main/core/cargo-rusteze rusteze
+cargo install cargo-rusteze
 ```
 
 ## Quick Look
